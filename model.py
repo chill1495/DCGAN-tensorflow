@@ -78,6 +78,8 @@ class DCGAN(object):
 
     self.test_image = scipy.misc.imread('./test/test_image.jpg').astype(np.float32)
     self.test_slices = np.reshape(self.test_image,(-1,self.input_height,self.input_width,self.c_dim))
+	
+	self.min_test_error = 1000					#minimum error to know when to save checkpoint
 
   def build_model(self):
     if self.y_dim:
@@ -207,6 +209,7 @@ class DCGAN(object):
       print(" [*] Load SUCCESS")
     else:
       print(" [!] Load failed...")
+	  
 
     for epoch in xrange(config.epoch):
       if config.dataset == 'mnist':
@@ -337,6 +340,19 @@ class DCGAN(object):
               self.test_slices[0:samples.shape[0],:,:,:] = samples
               # Save discriminator output on test image to disk
               detect = self.sess.run(self.gd, feed_dict={self.grass_pic:self.test_slices})
+              # find error of each iteration and save the minimum value. If it is the absolute min, it will save a checkpoint of the run.
+              self.error_total = 0
+
+              for n in [9,13,17]:
+                if(n == 9):
+                  self.error_total += np.sum(np.square(detect[(n-1) * 32: (n-1) * 32 + 64]))
+                else:
+                  self.error_total += np.sum(np.square(1-detect[(n-1) * 32: (n-1) * 32 + 64]))
+
+                if(self.error_total < self.min_test_error):
+                  self.min_test_error = self.error_total
+                  self.save("./checkpoint/deploy_variables", counter)
+
               detect_img = Image.fromarray((np.reshape(detect,(18,32)) * 255.9).astype(np.uint8))
               detect_img.save('./{}/test/test_{:02}_{:04d}.png'.
                               format(config.sample_dir, epoch, idx))
