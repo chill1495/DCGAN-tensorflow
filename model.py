@@ -78,8 +78,8 @@ class DCGAN(object):
 
     self.test_image = scipy.misc.imread('./test/test_image.jpg').astype(np.float32)
     self.test_slices = np.reshape(self.test_image,(-1,self.input_height,self.input_width,self.c_dim))
-	
-	self.min_test_error = 1000					#minimum error to know when to save checkpoint
+
+    self.min_test_error = 1000 #minimum error to know when to save checkpoint
 
   def build_model(self):
     if self.y_dim:
@@ -157,6 +157,7 @@ class DCGAN(object):
     self.g_vars = [var for var in t_vars if 'g_' in var.name]
 
     self.saver = tf.train.Saver()
+    self.saver2 = tf.train.Saver()
 
   def train(self, config):
     """Train DCGAN"""
@@ -345,13 +346,18 @@ class DCGAN(object):
 
               for n in [9,13,17]:
                 if(n == 9):
-                  self.error_total += np.sum(np.square(detect[(n-1) * 32: (n-1) * 32 + 64]))
+                  self.error_total += np.sqrt(np.sum(np.square(detect[(n-1) * 32: (n-1) * 32 + 64])))
                 else:
-                  self.error_total += np.sum(np.square(1-detect[(n-1) * 32: (n-1) * 32 + 64]))
+                  self.error_total += np.sqrt(np.sum(np.square(1-detect[(n-1) * 32: (n-1) * 32 + 64])))
 
-                if(self.error_total < self.min_test_error):
+              if(self.error_total <= self.min_test_error):
                   self.min_test_error = self.error_total
-                  self.save("./checkpoint/deploy_variables", counter)
+                  self.save2("./checkpoint/deploy_variables", counter)
+                  best_error_image = Image.fromarray((np.reshape(detect,(18,32)) * 255.9).astype(np.uint8))
+                  best_error_image.save('./samples/test/best_image/best_image_{:06d}.png'.format(counter))
+                  print('New Lowest Error: %.4f' % self.min_test_error)
+              else:
+                  print('Error not lower. Error is %.4f. Global min is %.4f' % (self.error_total, self.min_test_error))
 
               detect_img = Image.fromarray((np.reshape(detect,(18,32)) * 255.9).astype(np.uint8))
               detect_img.save('./{}/test/test_{:02}_{:04d}.png'.
@@ -575,6 +581,18 @@ class DCGAN(object):
     self.saver.save(self.sess,
             os.path.join(checkpoint_dir, model_name),
             global_step=step)
+    
+  def save2(self, checkpoint_dir, step):
+    model_name = "DCGAN.model"
+    checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+    if not os.path.exists(checkpoint_dir):
+      os.makedirs(checkpoint_dir)
+
+    self.saver2.save(self.sess,
+                     os.path.join(checkpoint_dir, model_name),
+                     global_step=step)
+    
 
   def load(self, checkpoint_dir):
     import re
@@ -585,6 +603,23 @@ class DCGAN(object):
     if ckpt and ckpt.model_checkpoint_path:
       ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
       self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
+      counter = int(next(re.finditer("(\d+)(?!.*\d)",ckpt_name)).group(0))
+      print(" [*] Success to read {}".format(ckpt_name))
+      return True, counter
+    else:
+      print(" [*] Failed to find a checkpoint")
+      return False, 0
+
+
+  def load2(self, checkpoint_dir):
+    import re
+    print(" [*] Reading checkpoints...")
+    checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+    ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+    if ckpt and ckpt.model_checkpoint_path:
+      ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+      self.saver2.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
       counter = int(next(re.finditer("(\d+)(?!.*\d)",ckpt_name)).group(0))
       print(" [*] Success to read {}".format(ckpt_name))
       return True, counter
