@@ -1,6 +1,7 @@
 import os
 import scipy.misc
 import numpy as np
+from PIL import Image
 
 from model import DCGAN
 from utils import pp, visualize, to_json, show_all_variables
@@ -81,20 +82,22 @@ def main(_):
     show_all_variables()
     if FLAGS.is_train:
       dcgan.train(FLAGS)
+    elif FLAGS.detect_grass:
+      if not dcgan.load2('./checkpoint/deploy_variables/'):
+        raise Exception("[!] Train a model first, then run test mode")
     else:
-      if not dcgan.load(FLAGS.checkpoint_dir):
+      if not dcgan.load('./checkpoint/'):
         raise Exception("[!] Train a model first, then run test mode")
 
     # If true, take photos, splice them into Nx60x60x3 numpy array, run that
     # through discriminator to get (Nx1) array between 0 and 1 to determine
     # if that 60x60x3 slice is grass or not.
     if FLAGS.detect_grass:
-      image = scipy.misc.imread('./test/random_real_generated.jpg').astype(np.float32)
+      image = scipy.misc.imread('./test/test_image_05.jpg').astype(np.float32)
       slices = np.reshape(image,(-1,FLAGS.input_height,FLAGS.input_width,FLAGS.c_dim))
-      print(slices.shape)
       D = dcgan.sess.run(dcgan.gd,feed_dict={dcgan.grass_pic:slices})
-      D_np = np.reshape(D,(18,32))
-      print(D_np)
+      detect_img = Image.fromarray((np.reshape(D,(18,32)) * 255.9).astype(np.uint8))
+      detect_img.save('./test/grass_detect.png')
 
     # to_json("./web/js/layers.js", [dcgan.h0_w, dcgan.h0_b, dcgan.g_bn0],
     #                 [dcgan.h1_w, dcgan.h1_b, dcgan.g_bn1],
